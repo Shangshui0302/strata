@@ -33,11 +33,40 @@ mod tests;
 pub(crate) fn resolve(name: &str) -> Result<PathBuf, String> {
     let search: Vec<&Path> = SEARCH_ROOTS.iter().copied().map(Path::new).collect();
     let trust: Vec<&Path> = TRUST_ROOTS.iter().copied().map(Path::new).collect();
-    resolve_in(name, &search, &trust)
+    resolve_with_extra_in(
+        name,
+        &search,
+        &trust,
+        option_env!("STRATA_TRUSTED_COMMAND_PATH"),
+    )
 }
 
 pub(crate) fn command(name: &str) -> Result<Command, String> {
     Ok(Command::new(resolve(name)?))
+}
+
+fn resolve_with_extra_in(
+    name: &str,
+    search_roots: &[&Path],
+    trust_roots: &[&Path],
+    extra_path: Option<&str>,
+) -> Result<PathBuf, String> {
+    let Some(extra_path) = extra_path else {
+        return resolve_in(name, search_roots, trust_roots);
+    };
+    let extra: Vec<PathBuf> = std::env::split_paths(extra_path)
+        .filter(|path| path.is_absolute())
+        .filter_map(|path| path.canonicalize().ok())
+        .filter(|path| path.is_dir() && sits_under(path, trust_roots))
+        .collect();
+    // Use the trusted directory itself, never a replaceable alias to it.
+    // Keep each helper's basename for multicall binaries, and system wrappers first.
+    let search: Vec<&Path> = search_roots
+        .iter()
+        .copied()
+        .chain(extra.iter().map(PathBuf::as_path))
+        .collect();
+    resolve_in(name, &search, trust_roots)
 }
 
 pub(crate) fn resolve_in(

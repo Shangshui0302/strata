@@ -15,6 +15,7 @@ effect and does not override the sandbox's cleared environment.
 
 | Build-time variable | Default | Purpose |
 | --- | --- | --- |
+| `STRATA_TRUSTED_COMMAND_PATH` | Unset | Colon-separated fallback directories for trusted host helpers, including bubblewrap |
 | `STRATA_SANDBOX_PATH` | `/usr/bin` | Colon-separated helper binary directories inside the sandbox |
 | `STRATA_SANDBOX_ROOT` | `/usr` | System runtime tree, bound read-only at the same absolute path |
 | `STRATA_SANDBOX_PRLIMIT` | `/usr/bin/prlimit` | Absolute resource-limit launcher path inside the sandbox |
@@ -23,6 +24,7 @@ effect and does not override the sandbox's cleared environment.
 For example, a Nix package can compile with:
 
 ```sh
+STRATA_TRUSTED_COMMAND_PATH='/nix/store/<bubblewrap>/bin' \
 STRATA_SANDBOX_PATH='/nix/store/<ffmpeg>/bin:/nix/store/<imagemagick>/bin' \
 STRATA_SANDBOX_ROOT='/nix/store' \
 STRATA_SANDBOX_PRLIMIT='/nix/store/<util-linux>/bin/prlimit' \
@@ -38,9 +40,22 @@ Use only trusted, admin-managed runtime trees: binding `/` or a user-data tree
 would expose private files to untrusted decoders. Values are taken literally;
 leave variables unset to use defaults, rather than setting empty values.
 
-These settings apply to one-shot, pooled browser, media, and RAR extraction
-sandboxes. They do not change host-side trusted bubblewrap lookup, namespace
-isolation, resource limits, or the other narrow optional runtime mounts.
+`STRATA_TRUSTED_COMMAND_PATH` supplements host helper discovery, including
+bubblewrap lookup before a sandbox can start. Existing system directories always
+take priority, especially `/run/wrappers/bin` for NixOS security wrappers. Each
+additional directory must be absolute and resolve to a directory under the
+existing trust roots: `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`,
+`/run/wrappers/bin`, `/nix/store`, or `/gnu/store`. Empty, relative, missing and
+untrusted entries are ignored. Strata searches the canonical directory, so
+replacing a user-writable alias cannot redirect a resolved command. Each helper's
+canonical target must still be trusted; the helper basename is preserved for
+multicall binaries. This does not add trust roots or read the runtime `PATH`,
+`HOME`, or `STRATA_TRUSTED_COMMAND_PATH` environment variables.
+
+The `STRATA_SANDBOX_*` settings apply inside one-shot, pooled browser, media, and
+RAR extraction sandboxes. All settings leave namespace isolation, resource
+limits, and the other narrow optional runtime mounts unchanged. Leave the new
+host helper setting unset on distributions using the existing system paths.
 
 ## Providers
 
